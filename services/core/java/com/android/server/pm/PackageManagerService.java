@@ -4629,12 +4629,6 @@ public class PackageManagerService extends IPackageManager.Stub {
         pkg.applicationInfo.setBaseResourcePath(baseResourcePath);
         pkg.applicationInfo.setSplitResourcePaths(pkg.splitCodePaths);
 
-        // First, Restore applicationInfo`s primaryCpuAbi info from parsing data of packages.xml.
-        if (ps != null) {
-            pkg.applicationInfo.primaryCpuAbi = ps.primaryCpuAbiString;
-        }
-
-
         // Note that we invoke the following method only if we are about to unpack an application
         PackageParser.Package scannedPkg = scanPackageLI(pkg, parseFlags, scanFlags
                 | SCAN_UPDATE_SIGNATURE, currentTime, user);
@@ -5998,9 +5992,6 @@ public class PackageManagerService extends IPackageManager.Stub {
                 // unnecessary.
                 final File nativeLibraryRoot = new File(nativeLibraryRootStr);
 
-                // Second, Backup previous primaryCpuAbi value.
-                String parsedPrimaryCpuAbi = pkg.applicationInfo.primaryCpuAbi;
-
                 // Null out the abis so that they can be recalculated.
                 pkg.applicationInfo.primaryCpuAbi = null;
                 pkg.applicationInfo.secondaryCpuAbi = null;
@@ -6068,55 +6059,20 @@ public class PackageManagerService extends IPackageManager.Stub {
                         needsRenderScriptOverride = true;
                     }
 
-                    int copyRet = 0;
-                    boolean copyNativeBinariesForSupportedAbiNeeded = true;
-                    final String primaryCpuAbi;
-
+                    final int copyRet;
                     if (isAsec) {
                         copyRet = NativeLibraryHelper.findSupportedAbi(handle, abiList);
                     } else {
-                        // Third, Set the abi type.
-                        if (cpuAbiOverride == null && parsedPrimaryCpuAbi !=null) {
-                            primaryCpuAbi = parsedPrimaryCpuAbi;
-                        } else {
-                            final int ret = NativeLibraryHelper.findSupportedAbi(handle, abiList);
-
-                            if (ret < 0 && ret != PackageManager.NO_NATIVE_LIBRARIES) {
-                                throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
-                                        "Error unpackaging native libs for app, errorCode=" + ret);
-                            }
-
-                            if (ret >= 0) {
-                                primaryCpuAbi = abiList[ret];
-                            } else if (ret == PackageManager.NO_NATIVE_LIBRARIES && cpuAbiOverride != null) {
-                                primaryCpuAbi = cpuAbiOverride;
-                            } else {
-                                primaryCpuAbi = abiList[0];
-                            }
-                        }
-
-                        // Fourth, Check dexOptNeeded with abi type.
-                        final String instructionSet = VMRuntime.getInstructionSet(primaryCpuAbi);
-                        final String dexCodeInstructionSet = getDexCodeInstructionSet(instructionSet);
-                        final byte dexoptRequired = DexFile.isDexOptNeededInternal(pkg.baseCodePath,
-                                pkg.packageName, dexCodeInstructionSet, false);
-                        final boolean isDexOptNeeded =  dexoptRequired != DexFile.UP_TO_DATE;
-                        // Fifth, Do copyNativeBinariesForSupportedAbi or skip.
-                        copyNativeBinariesForSupportedAbiNeeded = isDexOptNeeded || isUpdatedSystemApp(pkg) ;
-                        if (copyNativeBinariesForSupportedAbiNeeded) {
-                            copyRet = NativeLibraryHelper.copyNativeBinariesForSupportedAbi(handle,
-                                    nativeLibraryRoot, abiList, useIsaSpecificSubdirs);
-                        }
+                        copyRet = NativeLibraryHelper.copyNativeBinariesForSupportedAbi(handle,
+                                nativeLibraryRoot, abiList, useIsaSpecificSubdirs);
                     }
 
-                    if (copyNativeBinariesForSupportedAbiNeeded && copyRet < 0 && copyRet != PackageManager.NO_NATIVE_LIBRARIES) {
+                    if (copyRet < 0 && copyRet != PackageManager.NO_NATIVE_LIBRARIES) {
                         throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
                                 "Error unpackaging native libs for app, errorCode=" + copyRet);
                     }
 
-                    if (!copyNativeBinariesForSupportedAbiNeeded) {
-                        pkg.applicationInfo.primaryCpuAbi = parsedPrimaryCpuAbi;
-                    } else if (copyRet >= 0) {
+                    if (copyRet >= 0) {
                         pkg.applicationInfo.primaryCpuAbi = abiList[copyRet];
                     } else if (copyRet == PackageManager.NO_NATIVE_LIBRARIES && cpuAbiOverride != null) {
                         pkg.applicationInfo.primaryCpuAbi = cpuAbiOverride;
